@@ -1,12 +1,14 @@
 import streamlit as st
 import shelve
 import openai
+from dotenv import load_dotenv
 from PIL import Image
 import os
 import time
 
 # Set up OpenAI API key from Streamlit secrets
-openai.api_key = st.secrets["openai"]["api_key"]
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Ensure openai_model is initialized in session state
 if "openai_model" not in st.session_state:
