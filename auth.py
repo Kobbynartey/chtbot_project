@@ -3,6 +3,7 @@ from PIL import Image
 import os
 import time
 from app import chat_interface
+import openai
 
 # Set page config at the very beginning
 st.set_page_config(page_title="Maverick Chatbot")

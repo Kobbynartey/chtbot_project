@@ -2,6 +2,7 @@ import streamlit as st
 import shelve
 import openai
 
+
 # Set up OpenAI API key from Streamlit secrets
 openai.api_key = st.secrets["openai"]["api_key"]
 
