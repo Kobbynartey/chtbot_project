@@ -1,79 +1,102 @@
 import streamlit as st
+import shelve
+import openai
 from PIL import Image
 import os
 import time
-from app import chat_interface
-import openai
 
-# Set page config at the very beginning
-st.set_page_config(page_title="Maverick Chatbot")
+# Set up OpenAI API key from Streamlit secrets
+openai.api_key = st.secrets["openai"]["api_key"]
 
-# CSS styles
-css = """
-<style>
-body {
-    font-family: Arial, sans-serif;
-}
-.stButton > button {
-    width: 100%;
-    border-radius: 20px;
-    background-color: #FF4B4B;
-    color: white;
-    border: none;
-    padding: 10px 0;
-}
-.centered {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-</style>
-"""
+# Ensure openai_model is initialized in session state
+if "openai_model" not in st.session_state:
+    st.session_state["openai_model"] = "gpt-3.5-turbo"
 
-def welcome_page():
-    st.markdown("<h1 style='text-align: center;'>Maverick Chatbot</h1>", unsafe_allow_html=True)
-    
-    # Create a placeholder for the animated text
-    text_placeholder = st.empty()
-    
-    image_path = "get_started.png"
-    
+# Load chat history from shelve file
+def load_chat_history():
+    try:
+        with shelve.open("chat_history") as db:
+            return db.get("messages", [])
+    except Exception as e:
+        st.error(f"Error loading chat history: {e}")
+        return []
+
+# Save chat history to shelve file
+def save_chat_history(messages):
+    try:
+        with shelve.open("chat_history") as db:
+            db["messages"] = messages
+    except Exception as e:
+        st.error(f"Error saving chat history: {e}")
+
+# Delete chat history
+def delete_chat_history():
+    try:
+        with shelve.open("chat_history") as db:
+            if "messages" in db:
+                del db["messages"]
+        st.session_state.messages = []
+    except Exception as e:
+        st.error(f"Error deleting chat history: {e}")
+
+def chat_interface():
+    st.title("Mav Chatbot Interface")
+
+    # Display get started image
+    image_path = "/workspaces/chtbot_project/get_started.png"  # Update this path to your image location
     if os.path.exists(image_path):
         image = Image.open(image_path)
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            st.image(image, width=300, use_column_width=True)
-    else:
-        st.error(f"Image not found at path: {image_path}")
-    
-    if st.button("Get Started"):
-        st.session_state.page = 'chat'
-        st.rerun()
+        st.image(image, caption='Get Started')
 
-    # List of phrases to animate
-    phrases = [
-        "Instant Retail Savvy, Just Ask!",
-        "Retail Insights on Demand!",
-        "Effortless Retail Intelligence!"
-    ]
-    
-    # Animation loop
-    for phrase in phrases:
-        for i in range(len(phrase) + 1):
-            text_placeholder.markdown(f"<h2 style='text-align: center; color: #FF4B4B;'>{phrase[:i]}▌</h2>", unsafe_allow_html=True)
-            time.sleep(0.05)
-        time.sleep(1)  # Pause at the end of each phrase
+    # Sidebar
+    with st.sidebar:
+        st.header("Chat Summary")
 
-def auth_main():
-    st.markdown(css, unsafe_allow_html=True)
+        # Display user questions
+        if "messages" in st.session_state:
+            user_questions = [msg["content"] for msg in st.session_state.messages if msg["role"] == "user"]
+            for i, question in enumerate(user_questions[-5:], 1):  # Display last 5 questions
+                st.write(f"{i}. {question[:50]}...")  # Truncate long questions
 
-    if 'page' not in st.session_state:
-        st.session_state.page = 'welcome'
+        # Delete chat history button
+        if st.button("Delete Chat History"):
+            delete_chat_history()
+            st.success("Chat history deleted!")
+            st.rerun()
 
-    if st.session_state.page == 'welcome':
-        welcome_page()
-    elif st.session_state.page == 'chat':
-        chat_interface()
+    # Main chat interface
+    if "messages" not in st.session_state:
+        st.session_state.messages = load_chat_history()
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("Ask me anything about our retail data?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
+            try:
+                response = openai.ChatCompletion.create(
+                    model=st.session_state["openai_model"],
+                    messages=[
+                        {"role": m["role"], "content": m["content"]}
+                        for m in st.session_state.messages
+                    ],
+                    stream=True
+                )
+                for chunk in response:
+                    full_response += chunk.choices[0].delta.get("content", "")
+                    message_placeholder.markdown(full_response + "▌")
+            except Exception as e:
+                full_response = f"Error: {str(e)}"
+            message_placeholder.markdown(full_response)
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        save_chat_history(st.session_state.messages)
 
 if __name__ == "__main__":
-    auth_main()
+    chat_interface()
