@@ -1,18 +1,13 @@
 import streamlit as st
 import shelve
-from config import API_KEY
 import openai
 
 # Ensure openai_model is initialized in session state
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-3.5-turbo"
-try:
-    import openai
-    openai.api_key = API_KEY
-except ImportError:
-    st.error("OpenAI library is not installed. Please install it using 'pip install openai'")
 
-
+# Set up OpenAI API key from Streamlit secrets
+openai.api_key = st.secrets["openai"]["api_key"]
 
 # Load chat history from shelve file
 def load_chat_history():
@@ -87,12 +82,11 @@ def chat_interface():
                 ):
                     full_response += response.choices[0].delta.get("content", "")
                     message_placeholder.markdown(full_response + "▌")
-            except NameError:
-                full_response = "Error: OpenAI library is not available. Please install it to use this feature."
+            except Exception as e:
+                full_response = f"Error: {str(e)}"
             message_placeholder.markdown(full_response)
         st.session_state.messages.append({"role": "assistant", "content": full_response})
         save_chat_history(st.session_state.messages)
 
-# This is not necessary if you're running the app from auth.py
-# if __name__ == "__main__":
-#     chat_interface()
+if __name__ == "__main__":
+    chat_interface()
