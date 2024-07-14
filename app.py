@@ -2,12 +2,12 @@ import streamlit as st
 import shelve
 import openai
 
+# Set up OpenAI API key from Streamlit secrets
+openai.api_key = st.secrets["openai"]["api_key"]
+
 # Ensure openai_model is initialized in session state
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-3.5-turbo"
-
-# Set up OpenAI API key from Streamlit secrets
-openai.api_key = st.secrets["openai"]["api_key"]
 
 # Load chat history from shelve file
 def load_chat_history():
@@ -42,18 +42,18 @@ def chat_interface():
     # Sidebar
     with st.sidebar:
         st.header("Chat Summary")
-        
+
         # Display user questions
         if "messages" in st.session_state:
             user_questions = [msg["content"] for msg in st.session_state.messages if msg["role"] == "user"]
             for i, question in enumerate(user_questions[-5:], 1):  # Display last 5 questions
                 st.write(f"{i}. {question[:50]}...")  # Truncate long questions
-        
+
         # Delete chat history button
         if st.button("Delete Chat History"):
             delete_chat_history()
             st.success("Chat history deleted!")
-            st.rerun()
+            st.experimental_rerun()
 
     # Main chat interface
     if "messages" not in st.session_state:
@@ -72,15 +72,16 @@ def chat_interface():
             message_placeholder = st.empty()
             full_response = ""
             try:
-                for response in openai.ChatCompletion.create(
+                response = openai.ChatCompletion.create(
                     model=st.session_state["openai_model"],
                     messages=[
                         {"role": m["role"], "content": m["content"]}
                         for m in st.session_state.messages
                     ],
-                    stream=True,
-                ):
-                    full_response += response.choices[0].delta.get("content", "")
+                    stream=True
+                )
+                for chunk in response:
+                    full_response += chunk.choices[0].delta.get("content", "")
                     message_placeholder.markdown(full_response + "▌")
             except Exception as e:
                 full_response = f"Error: {str(e)}"
